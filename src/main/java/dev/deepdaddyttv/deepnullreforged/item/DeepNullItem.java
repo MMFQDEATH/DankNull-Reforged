@@ -328,7 +328,8 @@ public class DeepNullItem extends Item implements DockableNullItem {
                 DeepNullUpgradeType.STONE_GENERATOR,
                 DeepNullUpgradeType.OBSIDIAN_GENERATOR,
                 DeepNullUpgradeType.ENERGY,
-                DeepNullUpgradeType.DEEP_ENERGY
+                DeepNullUpgradeType.DEEP_ENERGY,
+                DeepNullUpgradeType.ENDER
         )) {
             return;
         }

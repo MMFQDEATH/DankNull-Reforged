@@ -1,6 +1,7 @@
 package dev.deepdaddyttv.deepnullreforged.inventory;
 
 import dev.deepdaddyttv.deepnullreforged.DeepNullConfig;
+import dev.deepdaddyttv.deepnullreforged.DeepNullReforged;
 import dev.deepdaddyttv.deepnullreforged.block.entity.DeepNullDockBlockEntity;
 import dev.deepdaddyttv.deepnullreforged.item.DampNullItem;
 import dev.deepdaddyttv.deepnullreforged.item.DeepNullItem;
@@ -326,15 +327,18 @@ public class DeepNullInventory extends ItemStackHandler {
         DeepNullContentMode contentMode = fluidOnly
                 ? DeepNullContentMode.FLUIDS
                 : DeepNullContentMode.byId(root.getInt(CONTENT_MODE_TAG));
+        boolean linked = isEnderMirrorLinked(root, registries);
         if (contentMode == DeepNullContentMode.FLUIDS) {
-            FluidStack fluid = peekFluidEntry(root.getList(FLUIDS_TAG, Tag.TAG_COMPOUND), selectedSlot, registries);
+            String fluidsKey = linked ? ENDER_MIRROR_FLUIDS_TAG : FLUIDS_TAG;
+            String chemicalsKey = linked ? ENDER_MIRROR_CHEMICALS_TAG : CHEMICALS_TAG;
+            FluidStack fluid = peekFluidEntry(root.getList(fluidsKey, Tag.TAG_COMPOUND), selectedSlot, registries);
             StoredChemical chemical = fluid.isEmpty()
-                    ? peekChemicalEntry(root.getList(CHEMICALS_TAG, Tag.TAG_COMPOUND), selectedSlot)
+                    ? peekChemicalEntry(root.getList(chemicalsKey, Tag.TAG_COMPOUND), selectedSlot)
                     : StoredChemical.EMPTY;
             return new SelectedRenderPreview(contentMode, selectedSlot, ItemStack.EMPTY, fluid, chemical);
         }
 
-        String itemsKey = isEnderMirrorLinked(root, registries) ? ENDER_MIRROR_ITEMS_TAG : ITEMS_TAG;
+        String itemsKey = linked ? ENDER_MIRROR_ITEMS_TAG : ITEMS_TAG;
         ItemStack selectedStack = peekStoredItemEntry(root, itemsKey, selectedSlot, registries);
         return new SelectedRenderPreview(contentMode, selectedSlot, selectedStack, FluidStack.EMPTY, StoredChemical.EMPTY);
     }
@@ -366,7 +370,12 @@ public class DeepNullInventory extends ItemStackHandler {
                 continue;
             }
             CompoundTag itemTag = entry.contains(STACK_TAG, Tag.TAG_COMPOUND) ? entry.getCompound(STACK_TAG) : entry;
-            return ItemStack.parseOptional(registries, itemTag);
+            try {
+                return ItemStack.parseOptional(registries, itemTag);
+            } catch (RuntimeException exception) {
+                logUnreadableRenderEntry("upgrade", type.slot(), exception);
+                return ItemStack.EMPTY;
+            }
         }
         return ItemStack.EMPTY;
     }
@@ -399,7 +408,13 @@ public class DeepNullInventory extends ItemStackHandler {
                 continue;
             }
             CompoundTag itemTag = entry.contains(STACK_TAG, Tag.TAG_COMPOUND) ? entry.getCompound(STACK_TAG) : entry;
-            ItemStack storedStack = ItemStack.parseOptional(registries, itemTag);
+            ItemStack storedStack;
+            try {
+                storedStack = ItemStack.parseOptional(registries, itemTag);
+            } catch (RuntimeException exception) {
+                logUnreadableRenderEntry("item", slot, exception);
+                return ItemStack.EMPTY;
+            }
             if (storedStack.isEmpty()) {
                 return ItemStack.EMPTY;
             }
@@ -420,7 +435,12 @@ public class DeepNullInventory extends ItemStackHandler {
         for (int index = 0; index < listTag.size(); index++) {
             CompoundTag entry = listTag.getCompound(index);
             if (entry.getInt(SLOT_TAG) == slot) {
-                return FluidStack.parseOptional(registries, entry.getCompound(STACK_TAG));
+                try {
+                    return FluidStack.parseOptional(registries, entry.getCompound(STACK_TAG));
+                } catch (RuntimeException exception) {
+                    logUnreadableRenderEntry("fluid", slot, exception);
+                    return FluidStack.EMPTY;
+                }
             }
         }
         return FluidStack.EMPTY;
@@ -433,10 +453,25 @@ public class DeepNullInventory extends ItemStackHandler {
         for (int index = 0; index < listTag.size(); index++) {
             CompoundTag entry = listTag.getCompound(index);
             if (entry.getInt(SLOT_TAG) == slot) {
-                return StoredChemical.load(entry.getCompound(STACK_TAG));
+                try {
+                    StoredChemical chemical = StoredChemical.load(entry.getCompound(STACK_TAG));
+                    ResourceLocation chemicalId = chemical.chemicalLocation();
+                    if (!chemical.isEmpty() && (chemicalId == null || chemicalId.getNamespace().isBlank() || chemicalId.getPath().isBlank())) {
+                        DeepNullReforged.LOGGER.warn("Skipping unreadable DeepNull chemical preview entry in slot {}", slot);
+                        return StoredChemical.EMPTY;
+                    }
+                    return chemical;
+                } catch (RuntimeException exception) {
+                    logUnreadableRenderEntry("chemical", slot, exception);
+                    return StoredChemical.EMPTY;
+                }
             }
         }
         return StoredChemical.EMPTY;
+    }
+
+    private static void logUnreadableRenderEntry(String kind, int slot, RuntimeException exception) {
+        DeepNullReforged.LOGGER.warn("Skipping unreadable DeepNull {} preview entry in slot {}", kind, slot, exception);
     }
 
     public record SelectedRenderPreview(
