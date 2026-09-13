@@ -1,6 +1,7 @@
 package dev.deepdaddyttv.deepnullreforged.client;
 
 import dev.deepdaddyttv.deepnullreforged.inventory.DeepNullInventory;
+import dev.deepdaddyttv.deepnullreforged.item.DampNullItem;
 import dev.deepdaddyttv.deepnullreforged.item.DeepNullItem;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
@@ -57,5 +58,43 @@ public final class ClientDeepNullAccess {
     }
 
     public record HeldDeepNull(int inventorySlot, ItemStack stack, DeepNullInventory inventory) {
+    }
+
+    public static @Nullable HeldDeepNullPreview peekHeldDeepNull(Player player) {
+        int mainHandSlot = player.getInventory().selected;
+        ItemStack mainHandStack = player.getInventory().getItem(mainHandSlot);
+        if (mainHandStack.getItem() instanceof DeepNullItem deepNullItem) {
+            return new HeldDeepNullPreview(
+                    mainHandSlot,
+                    mainHandStack,
+                    DeepNullInventory.peekSelectedForRender(
+                            mainHandStack,
+                            deepNullItem instanceof DampNullItem,
+                            player.level().registryAccess()
+                    )
+            );
+        }
+
+        ItemStack offhandStack = player.getOffhandItem();
+        if (offhandStack.getItem() instanceof DeepNullItem deepNullItem) {
+            return new HeldDeepNullPreview(
+                    40,
+                    offhandStack,
+                    DeepNullInventory.peekSelectedForRender(
+                            offhandStack,
+                            deepNullItem instanceof DampNullItem,
+                            player.level().registryAccess()
+                    )
+            );
+        }
+
+        return null;
+    }
+
+    public record HeldDeepNullPreview(
+            int inventorySlot,
+            ItemStack stack,
+            DeepNullInventory.SelectedRenderPreview preview
+    ) {
     }
 }

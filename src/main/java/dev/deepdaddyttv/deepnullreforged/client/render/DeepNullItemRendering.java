@@ -95,8 +95,17 @@ public final class DeepNullItemRendering {
 
         Minecraft minecraft = Minecraft.getInstance();
         HolderLookup.Provider registries = minecraft.level == null ? null : minecraft.level.registryAccess();
-        DeepNullInventory inventory = new DeepNullInventory(deepNullItem.tier(), deepNullStack, registries, null);
-        return new RenderContents(inventory.getSelectedStack(), inventory.getSelectedFluid(), inventory.getSelectedChemical(), inventory.getContentMode());
+        DeepNullInventory.SelectedRenderPreview preview = DeepNullInventory.peekSelectedForRender(
+                deepNullStack,
+                deepNullItem instanceof DampNullItem,
+                registries
+        );
+        return new RenderContents(
+                preview.itemStack(),
+                preview.fluidStack(),
+                preview.chemicalStack(),
+                preview.contentMode()
+        );
     }
 
     private static final class RendererHolder {

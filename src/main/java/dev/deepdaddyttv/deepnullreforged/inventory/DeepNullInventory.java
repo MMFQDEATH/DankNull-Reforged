@@ -10,6 +10,7 @@ import net.minecraft.core.HolderLookup;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
@@ -282,6 +283,176 @@ public class DeepNullInventory extends ItemStackHandler {
             return StyleGlassVariant.DEFAULT;
         }
         return StyleGlassVariant.byId(root.getString(STYLE_VARIANT_TAG));
+    }
+
+    /** Checks compact upgrade data without decoding the full DeepNull inventory. */
+    public static boolean peekHasAnyUpgrade(ItemStack stack, DeepNullUpgradeType... types) {
+        CompoundTag root = getRootTagView(stack);
+        if (root == null) {
+            return false;
+        }
+
+        Tag upgradeEntries = getUpgradeEntries(root);
+        if (!(upgradeEntries instanceof ListTag listTag)) {
+            return false;
+        }
+        for (DeepNullUpgradeType type : types) {
+            for (int index = 0; index < listTag.size(); index++) {
+                CompoundTag entry = listTag.getCompound(index);
+                if (entry.getInt(SLOT_TAG) == type.slot() && serializedItemId(entry).equals("deepnullreforged:" + type.itemId())) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /** Reads only the selected resource needed by held-item rendering and HUD change detection. */
+    public static SelectedRenderPreview peekSelectedForRender(
+            ItemStack stack,
+            boolean fluidOnly,
+            @Nullable HolderLookup.Provider registries
+    ) {
+        CompoundTag root = getRootTagView(stack);
+        if (root == null || registries == null) {
+            return SelectedRenderPreview.EMPTY;
+        }
+
+        int selectedSlot = root.contains(SELECTED_TAG, Tag.TAG_ANY_NUMERIC) ? root.getInt(SELECTED_TAG) : -1;
+        if (selectedSlot < 0) {
+            return SelectedRenderPreview.EMPTY;
+        }
+
+        DeepNullContentMode contentMode = fluidOnly
+                ? DeepNullContentMode.FLUIDS
+                : DeepNullContentMode.byId(root.getInt(CONTENT_MODE_TAG));
+        if (contentMode == DeepNullContentMode.FLUIDS) {
+            FluidStack fluid = peekFluidEntry(root.getList(FLUIDS_TAG, Tag.TAG_COMPOUND), selectedSlot, registries);
+            StoredChemical chemical = fluid.isEmpty()
+                    ? peekChemicalEntry(root.getList(CHEMICALS_TAG, Tag.TAG_COMPOUND), selectedSlot)
+                    : StoredChemical.EMPTY;
+            return new SelectedRenderPreview(contentMode, selectedSlot, ItemStack.EMPTY, fluid, chemical);
+        }
+
+        String itemsKey = isEnderMirrorLinked(root, registries) ? ENDER_MIRROR_ITEMS_TAG : ITEMS_TAG;
+        ItemStack selectedStack = peekStoredItemEntry(root, itemsKey, selectedSlot, registries);
+        return new SelectedRenderPreview(contentMode, selectedSlot, selectedStack, FluidStack.EMPTY, StoredChemical.EMPTY);
+    }
+
+    private static Tag getUpgradeEntries(CompoundTag root) {
+        if (root.contains(UPGRADES_TAG, Tag.TAG_COMPOUND)) {
+            return root.getCompound(UPGRADES_TAG).getList("Items", Tag.TAG_COMPOUND);
+        }
+        return root.getList(UPGRADES_TAG, Tag.TAG_COMPOUND);
+    }
+
+    private static String serializedItemId(CompoundTag entry) {
+        CompoundTag itemTag = entry.contains(STACK_TAG, Tag.TAG_COMPOUND) ? entry.getCompound(STACK_TAG) : entry;
+        return itemTag.getString("id");
+    }
+
+    private static ItemStack peekUpgradeStack(
+            CompoundTag root,
+            DeepNullUpgradeType type,
+            HolderLookup.Provider registries
+    ) {
+        Tag upgradeEntries = getUpgradeEntries(root);
+        if (!(upgradeEntries instanceof ListTag listTag)) {
+            return ItemStack.EMPTY;
+        }
+        for (int index = 0; index < listTag.size(); index++) {
+            CompoundTag entry = listTag.getCompound(index);
+            if (entry.getInt(SLOT_TAG) != type.slot()) {
+                continue;
+            }
+            CompoundTag itemTag = entry.contains(STACK_TAG, Tag.TAG_COMPOUND) ? entry.getCompound(STACK_TAG) : entry;
+            return ItemStack.parseOptional(registries, itemTag);
+        }
+        return ItemStack.EMPTY;
+    }
+
+    private static boolean isEnderMirrorLinked(CompoundTag root, HolderLookup.Provider registries) {
+        return EnderUpgradeItem.isLinked(peekUpgradeStack(root, DeepNullUpgradeType.ENDER, registries));
+    }
+
+    private static ItemStack peekStoredItemEntry(
+            CompoundTag root,
+            String itemsKey,
+            int slot,
+            HolderLookup.Provider registries
+    ) {
+        Tag storedList;
+        if (root.contains(itemsKey, Tag.TAG_LIST)) {
+            storedList = root.getList(itemsKey, Tag.TAG_COMPOUND);
+        } else if (root.contains(itemsKey, Tag.TAG_COMPOUND)) {
+            storedList = root.getCompound(itemsKey).getList("Items", Tag.TAG_COMPOUND);
+        } else {
+            return ItemStack.EMPTY;
+        }
+
+        if (!(storedList instanceof ListTag listTag)) {
+            return ItemStack.EMPTY;
+        }
+        for (int index = 0; index < listTag.size(); index++) {
+            CompoundTag entry = listTag.getCompound(index);
+            if (entry.getInt(SLOT_TAG) != slot) {
+                continue;
+            }
+            CompoundTag itemTag = entry.contains(STACK_TAG, Tag.TAG_COMPOUND) ? entry.getCompound(STACK_TAG) : entry;
+            ItemStack storedStack = ItemStack.parseOptional(registries, itemTag);
+            if (storedStack.isEmpty()) {
+                return ItemStack.EMPTY;
+            }
+            int storedCount = entry.contains(COUNT_TAG, Tag.TAG_ANY_NUMERIC) ? entry.getInt(COUNT_TAG) : storedStack.getCount();
+            if (storedCount <= 0) {
+                return ItemStack.EMPTY;
+            }
+            storedStack.setCount(storedCount);
+            return storedStack;
+        }
+        return ItemStack.EMPTY;
+    }
+
+    private static FluidStack peekFluidEntry(Tag storedList, int slot, HolderLookup.Provider registries) {
+        if (!(storedList instanceof ListTag listTag)) {
+            return FluidStack.EMPTY;
+        }
+        for (int index = 0; index < listTag.size(); index++) {
+            CompoundTag entry = listTag.getCompound(index);
+            if (entry.getInt(SLOT_TAG) == slot) {
+                return FluidStack.parseOptional(registries, entry.getCompound(STACK_TAG));
+            }
+        }
+        return FluidStack.EMPTY;
+    }
+
+    private static StoredChemical peekChemicalEntry(Tag storedList, int slot) {
+        if (!(storedList instanceof ListTag listTag)) {
+            return StoredChemical.EMPTY;
+        }
+        for (int index = 0; index < listTag.size(); index++) {
+            CompoundTag entry = listTag.getCompound(index);
+            if (entry.getInt(SLOT_TAG) == slot) {
+                return StoredChemical.load(entry.getCompound(STACK_TAG));
+            }
+        }
+        return StoredChemical.EMPTY;
+    }
+
+    public record SelectedRenderPreview(
+            DeepNullContentMode contentMode,
+            int selectedSlot,
+            ItemStack itemStack,
+            FluidStack fluidStack,
+            StoredChemical chemicalStack
+    ) {
+        public static final SelectedRenderPreview EMPTY = new SelectedRenderPreview(
+                DeepNullContentMode.ITEMS,
+                -1,
+                ItemStack.EMPTY,
+                FluidStack.EMPTY,
+                StoredChemical.EMPTY
+        );
     }
 
     public DeepNullTier tier() {
@@ -3627,7 +3798,15 @@ public class DeepNullInventory extends ItemStackHandler {
         }
 
         Level level = server.getLevel(link.dimension());
-        if (level == null || !(level.getBlockEntity(link.pos()) instanceof DeepNullDockBlockEntity dock) || !dock.hasStoredDeepNull()) {
+        if (level == null) {
+            invalidateEnderLink(enderUpgrade, clearInvalidLink);
+            return null;
+        }
+        if (!server.isSameThread() || !level.isLoaded(link.pos())) {
+            // Off-thread and unloaded-chunk reads are inconclusive, not proof that the dock vanished.
+            return null;
+        }
+        if (!(level.getBlockEntity(link.pos()) instanceof DeepNullDockBlockEntity dock) || !dock.hasStoredDeepNull()) {
             invalidateEnderLink(enderUpgrade, clearInvalidLink);
             return null;
         }
@@ -3798,26 +3977,25 @@ public class DeepNullInventory extends ItemStackHandler {
         return passesGhostSlotFilter(autoSmeltFilterStacks, normalizeAutoSmeltFilterMode(autoSmeltFilterMode), stack);
     }
 
-    private boolean passesGhostSlotFilter(NonNullList<ItemStack> configuredStacks, DeepNullFilterMode mode, ItemStack stack) {
-        boolean hasEntries = false;
+    static boolean passesGhostSlotFilter(NonNullList<ItemStack> configuredStacks, DeepNullFilterMode mode, ItemStack stack) {
         boolean matched = false;
         for (ItemStack filterStack : configuredStacks) {
             if (filterStack.isEmpty()) {
                 continue;
             }
-            hasEntries = true;
             if (matchesFilterStack(filterStack, stack)) {
                 matched = true;
                 break;
             }
         }
-        if (!hasEntries) {
-            return true;
-        }
+        return resolvesGhostSlotFilter(mode, matched);
+    }
+
+    static boolean resolvesGhostSlotFilter(DeepNullFilterMode mode, boolean matched) {
         return mode == DeepNullFilterMode.WHITELIST ? matched : !matched;
     }
 
-    private boolean matchesFilterStack(ItemStack filterStack, ItemStack incomingStack) {
+    private static boolean matchesFilterStack(ItemStack filterStack, ItemStack incomingStack) {
         if (filterStack.isEmpty() || incomingStack.isEmpty()) {
             return false;
         }

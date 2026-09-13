@@ -6,6 +6,7 @@ import dev.deepdaddyttv.deepnullreforged.dumpnull.DumpNullAutomation;
 import dev.deepdaddyttv.deepnullreforged.inventory.DeepNullInventory;
 import dev.deepdaddyttv.deepnullreforged.inventory.DeepNullTier;
 import dev.deepdaddyttv.deepnullreforged.inventory.DeepNullUpgradeType;
+import dev.deepdaddyttv.deepnullreforged.item.DampNullItem;
 import dev.deepdaddyttv.deepnullreforged.item.DockableNullItem;
 import dev.deepdaddyttv.deepnullreforged.item.DeepNullItem;
 import dev.deepdaddyttv.deepnullreforged.item.DenNullItem;
@@ -121,26 +122,44 @@ public class DeepNullDockBlockEntity extends BlockEntity {
             return;
         }
 
-        DeepNullInventory inventory = dock.createInventory();
-        if (inventory == null) {
-            return;
-        }
-
-        if (!inventory.isFluidOnly()) {
+        ItemStack storedDeepNull = dock.getStoredDeepNull();
+        if (!(storedDeepNull.getItem() instanceof DampNullItem)) {
             if (!dock.generatorBuffer.isEmpty()) {
                 dock.generatorBuffer = ItemStack.EMPTY;
                 dock.setChangedAndSync(false);
             }
-            if (inventory.hasStoneworksUpgrade() && level.getGameTime() % 20L == 0L) {
+            boolean hasStoneworks = DeepNullInventory.peekHasAnyUpgrade(storedDeepNull, DeepNullUpgradeType.STONEWORKS);
+            boolean hasFarm = DeepNullInventory.peekHasAnyUpgrade(storedDeepNull, DeepNullUpgradeType.FARM);
+            if (!hasFarm && (!hasStoneworks || level.getGameTime() % 20L != 0L)) {
+                return;
+            }
+            DeepNullInventory inventory = dock.createInventory();
+            if (inventory == null) {
+                return;
+            }
+            if (hasStoneworks && inventory.hasStoneworksUpgrade() && level.getGameTime() % 20L == 0L) {
                 inventory.runStoneworksCycle(false);
             }
-            if (inventory.hasFarmUpgrade()) {
+            if (hasFarm && inventory.hasFarmUpgrade()) {
                 inventory.runFarmCycle(level.getGameTime());
             }
             return;
         }
 
-        if (!hasGeneratorUpgrade(inventory)) {
+        if (!DeepNullInventory.peekHasAnyUpgrade(
+                storedDeepNull,
+                DeepNullUpgradeType.STONE_GENERATOR,
+                DeepNullUpgradeType.OBSIDIAN_GENERATOR
+        )) {
+            if (!dock.generatorBuffer.isEmpty()) {
+                dock.generatorBuffer = ItemStack.EMPTY;
+                dock.setChangedAndSync(false);
+            }
+            return;
+        }
+
+        DeepNullInventory inventory = dock.createInventory();
+        if (inventory == null || !hasGeneratorUpgrade(inventory)) {
             if (!dock.generatorBuffer.isEmpty()) {
                 dock.generatorBuffer = ItemStack.EMPTY;
                 dock.setChangedAndSync(false);

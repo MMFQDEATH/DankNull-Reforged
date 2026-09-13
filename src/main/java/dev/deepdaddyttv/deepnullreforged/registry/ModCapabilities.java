@@ -11,6 +11,8 @@ import dev.deepdaddyttv.deepnullreforged.dumpnull.DumpNullData;
 import dev.deepdaddyttv.deepnullreforged.dumpnull.DumpNullUpgradeType;
 import dev.deepdaddyttv.deepnullreforged.integration.mekanism.MekanismCompat;
 import dev.deepdaddyttv.deepnullreforged.inventory.DeepNullInventory;
+import dev.deepdaddyttv.deepnullreforged.inventory.DeepNullUpgradeType;
+import dev.deepdaddyttv.deepnullreforged.item.DampNullItem;
 import dev.deepdaddyttv.deepnullreforged.item.DeepNullItem;
 import dev.deepdaddyttv.deepnullreforged.item.DumpNullItem;
 import net.minecraft.core.BlockPos;
@@ -128,6 +130,9 @@ public final class ModCapabilities {
     }
 
     private static @Nullable IFluidHandlerItem createFluidHandler(ItemStack stack) {
+        if (!(stack.getItem() instanceof DampNullItem)) {
+            return null;
+        }
         DeepNullInventory inventory = createInventory(stack);
         if (inventory == null || !inventory.supportsFluidStorage()) {
             return null;
@@ -136,6 +141,9 @@ public final class ModCapabilities {
     }
 
     private static @Nullable IEnergyStorage createEnergyStorage(ItemStack stack) {
+        if (!DeepNullInventory.peekHasAnyUpgrade(stack, DeepNullUpgradeType.ENERGY, DeepNullUpgradeType.DEEP_ENERGY)) {
+            return null;
+        }
         DeepNullInventory inventory = createInventory(stack);
         if (inventory == null || !inventory.hasEnergyUpgrade()) {
             return null;

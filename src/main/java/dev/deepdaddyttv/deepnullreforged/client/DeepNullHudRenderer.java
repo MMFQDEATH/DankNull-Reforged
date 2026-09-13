@@ -36,12 +36,12 @@ public final class DeepNullHudRenderer {
             return;
         }
 
-        ClientDeepNullAccess.HeldDeepNull held = ClientDeepNullAccess.findHeldDeepNull(player);
-        if (held == null) {
+        if (!DeepNullHudState.shouldRender()) {
             return;
         }
 
-        if (!DeepNullHudState.shouldRender()) {
+        ClientDeepNullAccess.HeldDeepNull held = ClientDeepNullAccess.findHeldDeepNull(player);
+        if (held == null) {
             return;
         }
 

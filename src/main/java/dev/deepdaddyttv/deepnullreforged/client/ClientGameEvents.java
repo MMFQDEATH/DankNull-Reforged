@@ -93,68 +93,88 @@ public final class ClientGameEvents {
             PacketDistributor.sendToServer(DeepNullPayloads.ToggleGlobalAutoPickupPayload.INSTANCE);
         }
 
+        boolean autoPickupClicked = ClientModEvents.TOGGLE_AUTO_PICKUP.consumeClick();
+        boolean autoFeedingClicked = ClientModEvents.TOGGLE_AUTO_FEEDING.consumeClick();
+        boolean autoSmeltingClicked = ClientModEvents.TOGGLE_AUTO_SMELTING.consumeClick();
+        boolean stoneGeneratorClicked = ClientModEvents.CYCLE_STONE_GENERATOR.consumeClick();
+        boolean nextItemClicked = ClientModEvents.NEXT_ITEM.consumeClick();
+        boolean previousItemClicked = ClientModEvents.PREVIOUS_ITEM.consumeClick();
+
+        if (!autoPickupClicked && !autoFeedingClicked && !autoSmeltingClicked
+                && !stoneGeneratorClicked && !nextItemClicked && !previousItemClicked) {
+            return;
+        }
+
         ClientDeepNullAccess.HeldDeepNull held = ClientDeepNullAccess.findHeldDeepNull(player);
         if (held == null) {
             ClientDripNullAccess.HeldDripNull heldDripNull = ClientDripNullAccess.findHeldDripNull(player);
             if (heldDripNull != null) {
-                handleHeldDripNullCycle(heldDripNull);
+                handleHeldDripNullCycle(heldDripNull, nextItemClicked, previousItemClicked);
             }
             ClientDenNullAccess.HeldDenNull heldDenNull = ClientDenNullAccess.findHeldDenNull(player);
             if (heldDenNull != null) {
-                handleHeldDenNullCycle(heldDenNull);
+                handleHeldDenNullCycle(heldDenNull, nextItemClicked, previousItemClicked);
             }
             return;
         }
 
-        if (ClientModEvents.TOGGLE_AUTO_PICKUP.consumeClick()) {
+        if (autoPickupClicked) {
             handleAutoPickupHotkey(player, held);
         }
 
-        if (ClientModEvents.TOGGLE_AUTO_FEEDING.consumeClick()) {
+        if (autoFeedingClicked) {
             handleAutoFeedingHotkey(player, held);
         }
 
-        if (ClientModEvents.TOGGLE_AUTO_SMELTING.consumeClick()) {
+        if (autoSmeltingClicked) {
             handleAutoSmeltingHotkey(player, held);
         }
 
-        if (ClientModEvents.CYCLE_STONE_GENERATOR.consumeClick()) {
+        if (stoneGeneratorClicked) {
             handleStoneGeneratorHotkey(player, held);
         }
 
-        if (ClientModEvents.NEXT_ITEM.consumeClick()) {
+        if (nextItemClicked) {
             held.inventory().cycleSelected(true);
             PacketDistributor.sendToServer(new DeepNullPayloads.SetSelectedSlotPayload(held.inventorySlot(), held.inventory().getSelectedSlot()));
         }
 
-        if (ClientModEvents.PREVIOUS_ITEM.consumeClick()) {
+        if (previousItemClicked) {
             held.inventory().cycleSelected(false);
             PacketDistributor.sendToServer(new DeepNullPayloads.SetSelectedSlotPayload(held.inventorySlot(), held.inventory().getSelectedSlot()));
         }
     }
 
-    private static void handleHeldDenNullCycle(ClientDenNullAccess.HeldDenNull heldDenNull) {
+    private static void handleHeldDenNullCycle(
+            ClientDenNullAccess.HeldDenNull heldDenNull,
+            boolean nextItemClicked,
+            boolean previousItemClicked
+    ) {
         if (heldDenNull.data().entries().isEmpty()) {
             return;
         }
-        if (ClientModEvents.NEXT_ITEM.consumeClick()) {
+        if (nextItemClicked) {
             ClientDenNullAccess.cycleSelected(heldDenNull, true);
             PacketDistributor.sendToServer(new DenNullPayloads.CycleHeldPayload(heldDenNull.inventorySlot(), true));
         }
-        if (ClientModEvents.PREVIOUS_ITEM.consumeClick()) {
+        if (previousItemClicked) {
             ClientDenNullAccess.cycleSelected(heldDenNull, false);
             PacketDistributor.sendToServer(new DenNullPayloads.CycleHeldPayload(heldDenNull.inventorySlot(), false));
         }
     }
 
-    private static void handleHeldDripNullCycle(ClientDripNullAccess.HeldDripNull heldDripNull) {
+    private static void handleHeldDripNullCycle(
+            ClientDripNullAccess.HeldDripNull heldDripNull,
+            boolean nextItemClicked,
+            boolean previousItemClicked
+    ) {
         if (heldDripNull.data().profiles().isEmpty()) {
             return;
         }
-        if (ClientModEvents.NEXT_ITEM.consumeClick()) {
+        if (nextItemClicked) {
             PacketDistributor.sendToServer(new DripNullPayloads.CycleHeldProfilePayload(heldDripNull.inventorySlot(), true));
         }
-        if (ClientModEvents.PREVIOUS_ITEM.consumeClick()) {
+        if (previousItemClicked) {
             PacketDistributor.sendToServer(new DripNullPayloads.CycleHeldProfilePayload(heldDripNull.inventorySlot(), false));
         }
     }
